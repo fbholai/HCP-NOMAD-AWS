@@ -5,11 +5,50 @@ data "aws_region" "current" {}
 data "aws_vpc" "nomad_vpc" {
   id = var.vpc_id
 }
+#data source for public subnet
+data "aws_subnet_ids" "public"{
+  vpc_id = var.vpc_id
+  tags = {
+    Name = "Public subnet"
+  }
+}
 
-# data source for subnet ids in VPC
+
 data "aws_subnet_ids" "default" {
   vpc_id = data.aws_vpc.nomad_vpc.id
+  tags = {
+    Name = "Private subnet",
+  }
 }
+#nieuw toegevoegd
+data "aws_subnet_ids" "defaults" {
+  vpc_id = data.aws_vpc.nomad_vpc.id
+  tags = {
+    Name = "Public subnet",
+  }
+}
+#nieuw toegevoegd
+data "aws_subnet" "defaults" {
+  for_each = data.aws_subnet_ids.defaults.ids
+  id       = each.value
+}
+
+
+data "aws_subnet" "default" {
+  for_each = data.aws_subnet_ids.default.ids
+  id       = each.value
+}
+#nieuw toegevoegdv2
+data "aws_subnet" "public" {
+  for_each = data.aws_subnet_ids.public.ids
+  id       = each.value
+}
+
+data "aws_subnet" "bastion" {
+  count = "${length(data.aws_subnet_ids.public.ids)}"
+  id    = "${tolist(data.aws_subnet_ids.public.ids)[count.index]}"
+}
+
 
 # data source for availability zones
 data "aws_availability_zones" "available" {
@@ -39,6 +78,7 @@ resource "random_id" "environment_name" {
   prefix      = "${var.name_prefix}-"
 }
 
+#data.aws_subnet_ids.default.ids
 # creates Nomad autoscaling group for servers
 resource "aws_autoscaling_group" "nomad_servers" {
   name                      = aws_launch_configuration.nomad_servers.name
@@ -51,7 +91,7 @@ resource "aws_autoscaling_group" "nomad_servers" {
   health_check_grace_period = 15
   health_check_type         = "EC2"
   vpc_zone_identifier       = data.aws_subnet_ids.default.ids
-  tags = [
+  tags = [  
     {
       key                 = "Name"
       value               = "${var.name_prefix}-nomad-server"
@@ -77,6 +117,7 @@ resource "aws_autoscaling_group" "nomad_servers" {
   lifecycle {
     create_before_destroy = true
   }
+  
 }
 
 # provides a resource for a new autoscaling group launch configuration
@@ -104,15 +145,92 @@ resource "aws_launch_configuration" "nomad_servers" {
       enable_connect         = var.enable_connect,
       consul_config          = var.consul_config,
   })
-  associate_public_ip_address = var.public_ip
+  #associate_public_ip_address = var.public_ip
   iam_instance_profile        = aws_iam_instance_profile.instance_profile.name
   root_block_device {
     volume_type = "io1"
     volume_size = 50
     iops        = "2500"
   }
+  
+  lifecycle {
+    create_before_destroy = true
+  }
+  
+}
+
+resource "aws_lb" "ALB" {
+  name               = "ALB"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.loadbalancer.id]
+  subnets            = [for subnet in data.aws_subnet.public : subnet.id]
+}
+
+resource "aws_lb_target_group" "private_instances" {
+  name        = "ALBtargetgroup"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = data.aws_vpc.nomad_vpc.id
+  health_check{
+  port                  = 8080
+  path                  = "/echo"
+  matcher               = "200"
+  healthy_threshold     = 2
+  unhealthy_threshold   = 2
+  timeout               = 30 
+  interval              = 60
+}
+}
+
+resource "aws_lb_listener" "front_end"{
+  load_balancer_arn = aws_lb.ALB.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.private_instances.arn
+  }
+
+}
+
+resource "aws_launch_configuration" "bastionhost" {
+  name            = "${random_id.environment_name.hex}-bastionhost"
+  image_id        = data.aws_ami.ubuntu.id
+  instance_type   = var.instance_type
+  key_name        = var.key_name
+  security_groups = [aws_security_group.bastionhost.id]
 
   lifecycle {
     create_before_destroy = true
   }
 }
+
+resource "aws_autoscaling_group" "bastionhost" {
+  name                 = "terraform-asg-bastionhost"
+  launch_configuration = aws_launch_configuration.bastionhost.name
+  availability_zones        = data.aws_availability_zones.available.zone_ids
+  min_size                  = 1
+  max_size                  = 3
+  desired_capacity          = 2
+  wait_for_capacity_timeout = "480s"
+  health_check_grace_period = 15
+  health_check_type         = "EC2"
+  vpc_zone_identifier       = data.aws_subnet_ids.public.ids
+  tags = [  
+    {
+      key                 = "Name"
+      value               = "${var.name_prefix}-bastion-server"
+      propagate_at_launch = true
+    },
+  ]
+
+
+
+  lifecycle {
+    create_before_destroy = true
+  }
+  
+}
+  

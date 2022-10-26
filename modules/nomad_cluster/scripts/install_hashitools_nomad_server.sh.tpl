@@ -13,15 +13,17 @@ curl --silent -Lo /bin/jq https://github.com/stedolan/jq/releases/download/jq-1.
 chmod +x /bin/jq
 
 echo "Configuring system time"
-timedatectl set-timezone UTC
+timedatectl set-timezone UTC  
+
 
 echo "Starting deployment from AMI: ${ami}"
 INSTANCE_ID=`curl -s http://169.254.169.254/latest/meta-data/instance-id`
 AVAILABILITY_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
 LOCAL_IPV4=`curl -s http://169.254.169.254/latest/meta-data/local-ipv4`
 
+
 cat << EOF > /etc/consul.d/consul.hcl
-datacenter          = "${datacenter}"
+datacenter          = "dc1"
 server              = true
 bootstrap_expect    = ${bootstrap_expect}
 data_dir            = "/opt/consul/data"
@@ -114,24 +116,24 @@ if ! consul kv get acl_bootstrap 2>/dev/null; then
   # service "consul-snapshot" {
   # policy = "write"
   # }' | consul acl policy create -name snapshot_agent -rules -
-
+#aangepast van read naar write
   echo '
   node_prefix "" {
-    policy = "read"
+    policy = "write"
   }
   service_prefix "" {
-    policy = "read"
+    policy = "write"
   }
   session_prefix "" {
-    policy = "read"
+    policy = "write"
   }
   agent_prefix "" {
-    policy = "read"
+    policy = "write"
   }
   query_prefix "" {
-    policy = "read"
+    policy = "write"
   }
-  operator = "read"' |  consul acl policy create -name anonymous -rules -
+  operator = "write"' |  consul acl policy create -name anonymous -rules -
 
   consul acl token create -description "consul agent server token" -policy-name consul-agent-server -secret "${agent_server_token}" 1>/dev/null
   # consul acl token create -description "consul snapshot agent" -policy-name snapshot_agent -secret "${snapshot_token}" 1>/dev/null
@@ -200,6 +202,7 @@ done
 
 %{ if bootstrap }/tmp/bootstrap_tokens.sh%{ endif }
 echo "$INSTANCE_ID determined all nodes to be healthy and ready to go <3"
+DD_AGENT_MAJOR_VERSION=7 DD_API_KEY=bebadafd41bf44d21226ab43ae6a220a DD_SITE="datadoghq.eu" bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script.sh)"
 
 cat << EOF > /etc/nomad.d/nomad.hcl
 data_dir = "/opt/nomad/data"
@@ -209,6 +212,14 @@ bind_addr = "0.0.0.0"
 server {
   enabled = true
   bootstrap_expect = ${bootstrap_expect}
+}
+telemetry {
+ collection_interval = "1s"
+ datadog_address = "localhost:8125"
+ disable_hostname = true
+ publish_allocation_metrics = true
+ publish_node_metrics = true
+ prometheus_metrics = true
 }
 
 consul {

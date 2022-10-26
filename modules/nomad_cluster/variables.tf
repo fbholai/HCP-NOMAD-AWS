@@ -1,8 +1,14 @@
 variable "allowed_inbound_cidrs" {
   type        = list(string)
   description = "List of CIDR blocks to permit inbound Nomad access from"
+  default = ["0.0.0.0/0"]
 }
 
+variable "aws_region"{
+  type = string
+  description = "which region you want to deploy?"
+  default = "eu-central-1"
+}
 variable "bootstrap" {
   type        = bool
   default     = true
@@ -10,7 +16,12 @@ variable "bootstrap" {
 }
 
 variable "nomad_clients" {
-  default     = "3"
+  default     = "2"
+  description = "number of Nomad instances"
+}
+
+variable "nomad_servers" {
+  default     = "2"
   description = "number of Nomad instances"
 }
 
@@ -24,17 +35,12 @@ variable "consul_cluster_version" {
   description = "Custom Version Tag for Upgrade Migrations"
 }
 
-variable "nomad_servers" {
-  default     = "5"
-  description = "number of Nomad instances"
-}
-
 variable "consul_version" {
-  description = "Consul version"
+  description = "Which Consul version you want to deploy?"
 }
 
 variable "nomad_version" {
-  description = "Nomad version"
+  description = "Which Nomad version you want to deploy?"
 }
 
 variable "enable_connect" {
@@ -44,29 +50,40 @@ variable "enable_connect" {
 }
 
 variable "instance_type" {
-  default     = "m5.large"
+  default     = "t2.micro"
   description = "Instance type for Consul instances"
 }
 
 variable "key_name" {
-  default     = "default"
+  default     = "hashicorp"
   description = "SSH key name for Consul instances"
 }
 
 variable "name_prefix" {
-  description = "prefix used in resource names"
+  description = "Which prefix you want to use in resource names?"
 }
 
 variable "owner" {
-  description = "value of owner tag on EC2 instances"
+  description = "What is the owner tag?"
 }
 
 variable "public_ip" {
   type        = bool
   default     = false
-  description = "should ec2 instance have public ip?"
+  description = "should ec2 instance have public ip?/set to true or false"
 }
 
 variable "vpc_id" {
-  description = "VPC ID"
+  description = "What is the VPC-ID you want your infrastructure to deploy in?"
+}
+
+variable "external_id" {
+  type        = string
+  default     = "403136"
+  description = "This is your Grafana Cloud identifier and is used for security purposes."
+}
+variable "iam_role_name" {
+  type        = string
+  default     = "GrafanaCloudWatchIntegration"
+  description = "Customize the name of the IAM role used by Grafana for the CloudWatch integration."
 }

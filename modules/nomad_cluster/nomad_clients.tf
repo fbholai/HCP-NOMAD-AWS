@@ -2,15 +2,15 @@
 resource "aws_autoscaling_group" "nomad_clients" {
   name                      = aws_launch_configuration.nomad_clients.name
   launch_configuration      = aws_launch_configuration.nomad_clients.name
+  target_group_arns         = [aws_lb_target_group.private_instances.arn]
   availability_zones        = data.aws_availability_zones.available.zone_ids
   min_size                  = var.nomad_clients
   max_size                  = var.nomad_clients
   desired_capacity          = var.nomad_clients
   wait_for_capacity_timeout = "480s"
-  health_check_grace_period = 15
+  health_check_grace_period = 15   
   health_check_type         = "EC2"
   vpc_zone_identifier       = data.aws_subnet_ids.default.ids
-
   tags = [
     {
       key                 = "Name"
@@ -34,11 +34,12 @@ resource "aws_autoscaling_group" "nomad_clients" {
     },
   ]
 
-  depends_on = [aws_autoscaling_group.nomad_servers]
+  depends_on = [aws_autoscaling_group.nomad_servers,aws_lb.ALB]
 
   lifecycle {
     create_before_destroy = true
   }
+  
 }
 
 # provides a resource for a new autoscaling group launch configuration
@@ -58,7 +59,7 @@ resource "aws_launch_configuration" "nomad_clients" {
       gossip_key       = random_id.consul_gossip_encryption_key.b64_std,
       master_token     = random_uuid.consul_master_token.result
   })
-  associate_public_ip_address = var.public_ip
+  #associate_public_ip_address = var.public_ip
   iam_instance_profile        = aws_iam_instance_profile.instance_profile.name
   root_block_device {
     volume_size = 10
@@ -67,4 +68,5 @@ resource "aws_launch_configuration" "nomad_clients" {
   lifecycle {
     create_before_destroy = true
   }
+  
 }

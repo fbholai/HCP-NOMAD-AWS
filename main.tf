@@ -1,3 +1,10 @@
+provider "aws" {
+  
+  region = "eu-central-1"
+}
+
+
+
 module "nomad_cluster" {
   source = "./modules/nomad_cluster"
 
@@ -5,7 +12,7 @@ module "nomad_cluster" {
   instance_type          = var.instance_type
   consul_version         = var.consul_version
   nomad_version          = var.nomad_version
-  consul_cluster_version = var.consul_cluster_version
+  consul_cluster_version = var.consul_cluster_version 
   bootstrap              = var.bootstrap
   key_name               = var.key_name
   name_prefix            = var.name_prefix
@@ -16,4 +23,8 @@ module "nomad_cluster" {
   consul_config          = var.consul_config
   enable_connect         = var.enable_connect
   owner                  = var.owner
+}
+
+output "subnet_cidr_blocks" {
+  value = module.nomad_cluster.subnet_cidr_blocks
 }

@@ -42,8 +42,92 @@ data "aws_iam_policy_document" "cluster_discovery" {
     actions = [
       "ec2:DescribeInstances",
       "autoscaling:CompleteLifecycleAction",
-      "ec2:DescribeTags"
+      "ec2:DescribeTags",
+      "ssm:DescribeAssociation",
+      "ssm:GetDeployablePatchSnapshotForInstance",
+      "ssm:GetDocument",
+      "ssm:DescribeDocument",
+      "ssm:GetManifest",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:ListAssociations",
+      "ssm:ListInstanceAssociations",
+      "ssm:PutInventory",
+      "ssm:PutComplianceItems",
+      "ssm:PutConfigurePackageResult",
+      "ssm:UpdateAssociationStatus",
+      "ssm:UpdateInstanceAssociationStatus",
+      "ssm:UpdateInstanceInformation",
+      "ssm:StartSession",
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
+      "ec2messages:AcknowledgeMessage",
+      "ec2messages:DeleteMessage",
+      "ec2messages:FailMessage",
+      "ec2messages:GetEndpoint",
+      "ec2messages:GetMessages",
+      "ec2messages:SendReply",
     ]
     resources = ["*"]
   }
+}
+
+
+
+locals {
+  grafana_account_id = "008923505280"
+}
+
+data "aws_iam_policy_document" "trust_grafana" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.grafana_account_id}:root"]
+    }     
+
+    actions = [
+      "sts:AssumeRole",
+    ]
+    
+    condition {
+      test     = "StringEquals"
+      variable = "sts:ExternalId"
+      values   = [var.external_id]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "grafanaAWS" {
+  # allow role with this policy to do the following: list instances, list tags, autoscale
+  statement {
+    effect = "Allow"
+    actions = [
+      "tag:GetResources",
+      "sts:AssumeRole",
+      "cloudwatch:GetMetricData",
+      "cloudwatch:GetMetricStatistics",
+      "logs:DescribeLogGroups",
+      "cloudwatch:ListMetrics"
+    ]
+    resources = ["*"]
+  }
+}
+
+
+resource "aws_iam_role" "grafana_labs_cloudwatch_integration" {
+  name        = var.iam_role_name
+  description = "Role used by Grafana CloudWatch integration."
+
+  # Allow Grafana Labs' AWS account to assume this role.
+  assume_role_policy = data.aws_iam_policy_document.trust_grafana.json
+
+}  
+resource "aws_iam_role_policy" "grafana" {
+  name   = "grafanaAWS"
+  role   = aws_iam_role.grafana_labs_cloudwatch_integration.id
+  policy = data.aws_iam_policy_document.grafanaAWS.json
 }
